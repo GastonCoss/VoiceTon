@@ -24,6 +24,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Fichier temporaire pour stocker les tokens clients (en prod : utiliser une base de données)
+TOKENS_FILE = "tokens.json"
+
+def save_tokens_for_client(client_id, tokens):
+    try:
+        with open(TOKENS_FILE, "r") as f:
+            all_tokens = json.load(f)
+    except FileNotFoundError:
+        all_tokens = {}
+
+    all_tokens[client_id] = tokens
+    with open(TOKENS_FILE, "w") as f:
+        json.dump(all_tokens, f)
+
+def get_token_for_client(client_id):
+    try:
+        with open(TOKENS_FILE, "r") as f:
+            all_tokens = json.load(f)
+        return all_tokens.get(client_id)
+    except:
+        return None
+
 # 🔊 Transcription vocale avec Whisper + extraction IA
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
@@ -33,7 +55,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
             temp_audio_path = temp_audio.name
 
         print("✅ Audio reçu :", temp_audio_path)
-        print("📦 Taille du fichier :", os.path.getsize(temp_audio_path), "octets")
 
         with open(temp_audio_path, "rb") as audio_file:
             transcript_response = openai.Audio.transcribe(
@@ -43,7 +64,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
             )
 
         transcription_text = transcript_response["text"]
-        print("🔊 Transcription :", transcription_text)
 
         prompt = (
             f"Voici une transcription vocale : \"{transcription_text}\"\n"
@@ -58,7 +78,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
         )
 
         structured_data = completion.choices[0].message.content
-        print("🧠 Données structurées :", structured_data)
 
         try:
             structured_dict = json.loads(structured_data)
@@ -71,18 +90,16 @@ async def transcribe_audio(file: UploadFile = File(...)):
         })
 
     except Exception as e:
-        print("❌ Erreur:", str(e))
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# 🚀 Envoi des données à HubSpot via OAuth
-@app.post("/send-to-hubspot")
-async def send_to_hubspot(data: dict):
-    print("🚀 [BACKEND] Envoi à HubSpot :", data)
+# 🚀 Envoi des données à HubSpot avec token OAuth par client
+@app.post("/send-to-hubspot/{client_id}")
+def send_to_hubspot(client_id: str, data: dict):
+    tokens = get_token_for_client(client_id)
+    if not tokens:
+        return JSONResponse(status_code=400, content={"error": "Token introuvable pour ce client"})
 
-    access_token = os.getenv("HUBSPOT_ACCESS_TOKEN")
-    if not access_token:
-        return JSONResponse(content={"error": "Access token HubSpot manquant"}, status_code=500)
-
+    access_token = tokens["access_token"]
     url = "https://api.hubapi.com/crm/v3/objects/contacts"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -98,19 +115,12 @@ async def send_to_hubspot(data: dict):
     if data.get("entreprise"): properties["company"] = data["entreprise"]
 
     payload = {"properties": properties}
-    print("📦 Payload envoyé à HubSpot :", json.dumps(payload, indent=2, ensure_ascii=False))
-
     response = requests.post(url, headers=headers, json=payload)
-    print("📱 Status code HubSpot :", response.status_code)
-    print("📨 Réponse HubSpot brute :", response.text)
 
     if response.status_code == 201:
         return {"message": "Contact ajouté avec succès"}
     else:
-        try:
-            return JSONResponse(content={"error": "Erreur HubSpot", "details": response.json()}, status_code=500)
-        except:
-            return JSONResponse(content={"error": "Erreur HubSpot", "details": response.text}, status_code=500)
+        return JSONResponse(status_code=500, content={"error": "Erreur HubSpot", "details": response.text})
 
 # 🔐 Route OAuth : redirection vers HubSpot
 @app.get("/hubspot/auth")
@@ -118,16 +128,17 @@ def auth_hubspot():
     client_id = os.getenv("HUBSPOT_CLIENT_ID")
     redirect_uri = os.getenv("HUBSPOT_REDIRECT_URI")
     scope = "crm.objects.contacts.write crm.objects.contacts.read oauth"
+    state = str(uuid4())
     url = (
         f"https://app.hubspot.com/oauth/authorize"
         f"?client_id={client_id}"
         f"&redirect_uri={redirect_uri}"
         f"&scope={scope}"
-        f"&state=voiceton"
+        f"&state={state}"
     )
     return RedirectResponse(url)
 
-# 🔐 Callback OAuth : échange le code contre un token
+# 🔐 Callback OAuth : sauvegarde le token avec un identifiant client
 @app.get("/hubspot/callback")
 def hubspot_callback(request: Request):
     code = request.query_params.get("code")
@@ -149,12 +160,9 @@ def hubspot_callback(request: Request):
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     response = requests.post(token_url, data=data, headers=headers)
+    tokens = response.json()
 
-    # Sauvegarder le access_token dans le .env localement (ou une DB en prod)
-    if response.status_code == 200:
-        token_data = response.json()
-        print("🔑 Access Token Reçu :", token_data)
-    else:
-        print("❌ Erreur OAuth HubSpot:", response.text)
+    client_id_generated = str(uuid4())
+    save_tokens_for_client(client_id_generated, tokens)
 
-    return response.json()
+    return JSONResponse(content={"message": "Connecté avec succès", "client_id": client_id_generated})

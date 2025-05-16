@@ -7,10 +7,10 @@ from dotenv import load_dotenv
 import tempfile
 import json
 import requests
+from uuid import uuid4
 
 # Chargement des variables d'environnement
 load_dotenv()
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
@@ -74,12 +74,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
         print("❌ Erreur:", str(e))
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# 🚀 Envoi des données à HubSpot via clé API (à remplacer par OAuth)
+# 🚀 Envoi des données à HubSpot via clé API (temporaire)
 @app.post("/send-to-hubspot")
 async def send_to_hubspot(data: dict):
     print("🚀 [BACKEND] Envoi à HubSpot :", data)
 
-    api_key = os.getenv("HUBSPOT_API_KEY")  # À supprimer plus tard
+    api_key = os.getenv("HUBSPOT_API_KEY")
     if not api_key:
         return JSONResponse(content={"error": "HubSpot API key not set"}, status_code=500)
 
@@ -126,11 +126,13 @@ def auth_hubspot():
     client_id = os.getenv("HUBSPOT_CLIENT_ID")
     redirect_uri = os.getenv("HUBSPOT_REDIRECT_URI")
     scope = "crm.objects.contacts.write"
+    state = str(uuid4())  # ✅ fix ici
     url = (
         f"https://app.hubspot.com/oauth/authorize"
         f"?client_id={client_id}"
         f"&redirect_uri={redirect_uri}"
         f"&scope={scope}"
+        f"&state={state}"
     )
     return RedirectResponse(url)
 

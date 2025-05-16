@@ -160,8 +160,10 @@ def hubspot_callback(request: Request):
     response = requests.post(token_url, data=data, headers=headers)
     tokens = response.json()
 
+    # Génération d’un identifiant client unique
     client_id_generated = str(uuid4())
     save_tokens_for_client(client_id_generated, tokens)
 
-    # ✅ Redirection automatique vers le frontend avec le client_id en paramètre
-    return RedirectResponse(f"https://voiceton-front.vercel.app/?client_id={client_id_generated}")
+    # ✅ Redirection vers l'interface utilisateur avec client_id
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    return RedirectResponse(f"{frontend_url}?client_id={client_id_generated}")

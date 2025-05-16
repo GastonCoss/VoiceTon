@@ -74,23 +74,22 @@ async def transcribe_audio(file: UploadFile = File(...)):
         print("❌ Erreur:", str(e))
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# 🚀 Envoi des données à HubSpot via clé API (temporaire)
+# 🚀 Envoi des données à HubSpot via OAuth
 @app.post("/send-to-hubspot")
 async def send_to_hubspot(data: dict):
     print("🚀 [BACKEND] Envoi à HubSpot :", data)
 
-    api_key = os.getenv("HUBSPOT_API_KEY")
-    if not api_key:
-        return JSONResponse(content={"error": "HubSpot API key not set"}, status_code=500)
+    access_token = os.getenv("HUBSPOT_ACCESS_TOKEN")
+    if not access_token:
+        return JSONResponse(content={"error": "Access token HubSpot manquant"}, status_code=500)
 
     url = "https://api.hubapi.com/crm/v3/objects/contacts"
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }
 
     properties = {}
-
     if data.get("prénom"): properties["firstname"] = data["prénom"]
     if data.get("nom"): properties["lastname"] = data["nom"]
     if data.get("email"): properties["email"] = data["email"]
@@ -102,30 +101,23 @@ async def send_to_hubspot(data: dict):
     print("📦 Payload envoyé à HubSpot :", json.dumps(payload, indent=2, ensure_ascii=False))
 
     response = requests.post(url, headers=headers, json=payload)
-
-    print("📡 Status code HubSpot :", response.status_code)
+    print("📱 Status code HubSpot :", response.status_code)
     print("📨 Réponse HubSpot brute :", response.text)
 
     if response.status_code == 201:
         return {"message": "Contact ajouté avec succès"}
     else:
         try:
-            return JSONResponse(content={
-                "error": "Erreur HubSpot",
-                "details": response.json()
-            }, status_code=500)
+            return JSONResponse(content={"error": "Erreur HubSpot", "details": response.json()}, status_code=500)
         except:
-            return JSONResponse(content={
-                "error": "Erreur HubSpot",
-                "details": response.text
-            }, status_code=500)
+            return JSONResponse(content={"error": "Erreur HubSpot", "details": response.text}, status_code=500)
 
 # 🔐 Route OAuth : redirection vers HubSpot
 @app.get("/hubspot/auth")
 def auth_hubspot():
     client_id = os.getenv("HUBSPOT_CLIENT_ID")
     redirect_uri = os.getenv("HUBSPOT_REDIRECT_URI")
-    scope = "crm.objects.contacts.write"
+    scope = "crm.objects.contacts.write crm.objects.contacts.read oauth"
     url = (
         f"https://app.hubspot.com/oauth/authorize"
         f"?client_id={client_id}"
@@ -157,5 +149,12 @@ def hubspot_callback(request: Request):
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     response = requests.post(token_url, data=data, headers=headers)
+
+    # Sauvegarder le access_token dans le .env localement (ou une DB en prod)
+    if response.status_code == 200:
+        token_data = response.json()
+        print("🔑 Access Token Reçu :", token_data)
+    else:
+        print("❌ Erreur OAuth HubSpot:", response.text)
 
     return response.json()

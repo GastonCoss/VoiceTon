@@ -1,130 +1,160 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 import openai
 import os
 from dotenv import load_dotenv
-from fastapi.responses import JSONResponse
+import tempfile
 import json
 import requests
-import re
-from time import time
 
-# Charger les variables d’environnement
-load_dotenv(dotenv_path="/Users/gastonc/Desktop/VoiceTon/.env")
+# Chargement des variables d'environnement
+load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
-def est_telephone_valide(chaine):
-    return re.fullmatch(r"[\d\s\-\+()]+", chaine.strip()) is not None
+# Middleware CORS pour le frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # À restreindre en prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/")
-def read_root():
-    return {"message": "Voice2CRM API is running 🚀"}
-
+# 🔊 Transcription vocale avec Whisper + extraction IA
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        audio_bytes = await file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+            temp_audio.write(await file.read())
+            temp_audio_path = temp_audio.name
 
-        with open("temp.wav", "wb") as f:
-            f.write(audio_bytes)
+        print("✅ Audio reçu :", temp_audio_path)
+        print("📦 Taille du fichier :", os.path.getsize(temp_audio_path), "octets")
 
-        with open("temp.wav", "rb") as audio_file:
-            transcript = openai.Audio.transcribe(model="whisper-1", file=audio_file)
+        with open(temp_audio_path, "rb") as audio_file:
+            transcript_response = openai.Audio.transcribe(
+                model="whisper-1",
+                file=audio_file,
+                language="fr"
+            )
 
-        prompt = f"""
-Voici une transcription vocale d'un contact rencontré sur un salon professionnel :
-\"\"\"{transcript["text"]}\"\"\"
+        transcription_text = transcript_response["text"]
+        print("🔊 Transcription :", transcription_text)
 
-Peux-tu me retourner un JSON structuré avec les champs suivants (ou null si absent) :
-- prénom
-- nom
-- poste
-- entreprise
-- email
-- téléphone
+        prompt = (
+            f"Voici une transcription vocale : \"{transcription_text}\"\n"
+            f"Extrait les éléments suivants en JSON : prénom, nom, poste, entreprise, email, téléphone.\n"
+            f"Format attendu : {{ \"prénom\": ..., \"nom\": ..., \"poste\": ..., \"entreprise\": ..., \"email\": ..., \"téléphone\": ... }}"
+        )
 
-Réponds uniquement avec un objet JSON valide. Aucun texte autour.
-"""
-
-        chat_response = openai.ChatCompletion.create(
+        completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
         )
 
-        structured_data = chat_response["choices"][0]["message"]["content"]
-        print("🧠 Réponse GPT brute :", structured_data)
+        structured_data = completion.choices[0].message.content
+        print("🧠 Données structurées :", structured_data)
 
-        match = re.search(r"\{.*\}", structured_data, re.DOTALL)
-        if not match:
-            raise ValueError("La réponse GPT ne contient pas un JSON valide.")
-
-        json_text = match.group().strip()
         try:
-            contact_data = json.loads(json_text)
-            print("✅ JSON parsé avec succès :", contact_data)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Erreur de parsing JSON : {e} \nTexte reçu : {json_text}")
+            structured_dict = json.loads(structured_data)
+        except json.JSONDecodeError:
+            structured_dict = {}
 
-        hubspot_properties = {}
-        mapping = {
-            "firstname": "prénom",
-            "lastname": "nom",
-            "email": "email",
-            "phone": "téléphone",
-            "company": "entreprise",
-            "jobtitle": "poste"
-        }
-
-        for hubspot_field, gpt_field in mapping.items():
-            valeur = contact_data.get(gpt_field)
-            if isinstance(valeur, str) and valeur.strip():
-                if hubspot_field == "phone" and not est_telephone_valide(valeur):
-                    print("⚠️ Téléphone ignoré (invalide) :", valeur)
-                    continue
-                hubspot_properties[hubspot_field] = valeur.strip()
-
-        # Générer un email unique si manquant
-        if "email" not in hubspot_properties:
-            timestamp = int(time())
-            generated_email = f"{hubspot_properties.get('firstname', 'contact').lower()}.{hubspot_properties.get('lastname', 'inconnu').lower()}+{timestamp}@gmail.com"
-            hubspot_properties["email"] = generated_email
-            print("📧 Email généré :", generated_email)
-
-        # Ajouter un téléphone fictif si aucun valide
-        if "phone" not in hubspot_properties:
-            hubspot_properties["phone"] = "+33601020304"
-            print("📱 Téléphone fictif ajouté :", hubspot_properties["phone"])
-
-        if "lastname" not in hubspot_properties:
-            raise ValueError("HubSpot requiert un 'lastname' pour créer un contact.")
-
-        print("📦 Données envoyées à HubSpot :", hubspot_properties)
-        print("🔐 Clé API utilisée :", os.getenv("HUBSPOT_API_KEY"))
-
-        hubspot_contact = {
-            "properties": hubspot_properties
-        }
-
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.getenv('HUBSPOT_API_KEY')}"
-        }
-
-        response = requests.post(
-            url="https://api.hubapi.com/crm/v3/objects/contacts",
-            headers=headers,
-            data=json.dumps(hubspot_contact)
-        )
-
-        hubspot_result = response.json()
-
-        return {
-            "transcription": transcript["text"],
-            "données_structurées": contact_data,
-            "hubspot": hubspot_result
-        }
+        return JSONResponse(content={
+            "transcription": transcription_text,
+            "données_structurées": structured_dict
+        })
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        print("❌ Erreur:", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# 🚀 Envoi des données à HubSpot via clé API (à remplacer par OAuth)
+@app.post("/send-to-hubspot")
+async def send_to_hubspot(data: dict):
+    print("🚀 [BACKEND] Envoi à HubSpot :", data)
+
+    api_key = os.getenv("HUBSPOT_API_KEY")  # À supprimer plus tard
+    if not api_key:
+        return JSONResponse(content={"error": "HubSpot API key not set"}, status_code=500)
+
+    url = "https://api.hubapi.com/crm/v3/objects/contacts"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    properties = {}
+
+    if data.get("prénom"): properties["firstname"] = data["prénom"]
+    if data.get("nom"): properties["lastname"] = data["nom"]
+    if data.get("email"): properties["email"] = data["email"]
+    if data.get("téléphone"): properties["phone"] = data["téléphone"]
+    if data.get("poste"): properties["jobtitle"] = data["poste"]
+    if data.get("entreprise"): properties["company"] = data["entreprise"]
+
+    payload = {"properties": properties}
+    print("📦 Payload envoyé à HubSpot :", json.dumps(payload, indent=2, ensure_ascii=False))
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    print("📡 Status code HubSpot :", response.status_code)
+    print("📨 Réponse HubSpot brute :", response.text)
+
+    if response.status_code == 201:
+        return {"message": "Contact ajouté avec succès"}
+    else:
+        try:
+            return JSONResponse(content={
+                "error": "Erreur HubSpot",
+                "details": response.json()
+            }, status_code=500)
+        except:
+            return JSONResponse(content={
+                "error": "Erreur HubSpot",
+                "details": response.text
+            }, status_code=500)
+
+# 🔐 Route OAuth : redirection vers HubSpot
+@app.get("/hubspot/auth")
+def auth_hubspot():
+    client_id = os.getenv("HUBSPOT_CLIENT_ID")
+    redirect_uri = os.getenv("HUBSPOT_REDIRECT_URI")
+    scope = "crm.objects.contacts.write"
+    url = (
+        f"https://app.hubspot.com/oauth/authorize"
+        f"?client_id={client_id}"
+        f"&redirect_uri={redirect_uri}"
+        f"&scope={scope}"
+    )
+    return RedirectResponse(url)
+
+# 🔐 Callback OAuth : échange le code contre un token
+@app.get("/hubspot/callback")
+def hubspot_callback(request: Request):
+    code = request.query_params.get("code")
+    if not code:
+        return JSONResponse(status_code=400, content={"error": "Missing code"})
+
+    token_url = "https://api.hubapi.com/oauth/v1/token"
+    client_id = os.getenv("HUBSPOT_CLIENT_ID")
+    client_secret = os.getenv("HUBSPOT_CLIENT_SECRET")
+    redirect_uri = os.getenv("HUBSPOT_REDIRECT_URI")
+
+    data = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "code": code
+    }
+
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    response = requests.post(token_url, data=data, headers=headers)
+
+    return response.json()

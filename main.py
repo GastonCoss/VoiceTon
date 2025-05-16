@@ -126,13 +126,12 @@ def auth_hubspot():
     client_id = os.getenv("HUBSPOT_CLIENT_ID")
     redirect_uri = os.getenv("HUBSPOT_REDIRECT_URI")
     scope = "crm.objects.contacts.write"
-    state = str(uuid4())  # ✅ fix ici
     url = (
         f"https://app.hubspot.com/oauth/authorize"
         f"?client_id={client_id}"
         f"&redirect_uri={redirect_uri}"
         f"&scope={scope}"
-        f"&state={state}"
+        f"&state=voiceton"
     )
     return RedirectResponse(url)
 

@@ -54,8 +54,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
             temp_audio.write(await file.read())
             temp_audio_path = temp_audio.name
 
-        print("✅ Audio reçu :", temp_audio_path)
-
         with open(temp_audio_path, "rb") as audio_file:
             transcript_response = openai.Audio.transcribe(
                 model="whisper-1",
@@ -165,4 +163,5 @@ def hubspot_callback(request: Request):
     client_id_generated = str(uuid4())
     save_tokens_for_client(client_id_generated, tokens)
 
-    return JSONResponse(content={"message": "Connecté avec succès", "client_id": client_id_generated})
+    # ✅ Redirection automatique vers le frontend avec le client_id en paramètre
+    return RedirectResponse(f"https://voiceton-front.vercel.app/?client_id={client_id_generated}")

@@ -1,1 +1,24 @@
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+*.pyo
+
+# Fichiers d'environnement
 .env
+.env.*
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers de logs ou temporaires
+*.log
+*.sqlite
+*.db
+
+# Fichiers spécifiques à VS Code
+.vscode/
+
+# Environnements virtuels (si jamais tu en crées un ici)
+env/
+venv/

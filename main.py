@@ -9,22 +9,19 @@ import json
 import requests
 from uuid import uuid4
 
-# Chargement des variables d'environnement
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
-# Middleware CORS pour le frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # À restreindre en prod
+    allow_origins=["*"],  # À restreindre en production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Fichier temporaire pour stocker les tokens clients (en prod : utiliser une base de données)
 TOKENS_FILE = "tokens.json"
 
 def save_tokens_for_client(client_id, tokens):
@@ -33,7 +30,6 @@ def save_tokens_for_client(client_id, tokens):
             all_tokens = json.load(f)
     except FileNotFoundError:
         all_tokens = {}
-
     all_tokens[client_id] = tokens
     with open(TOKENS_FILE, "w") as f:
         json.dump(all_tokens, f)
@@ -46,7 +42,6 @@ def get_token_for_client(client_id):
     except:
         return None
 
-# 🔊 Transcription vocale avec Whisper + extraction IA
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
@@ -90,12 +85,15 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# 🚀 Envoi des données à HubSpot avec token OAuth par client
 @app.post("/send-to-hubspot/{client_id}")
 def send_to_hubspot(client_id: str, data: dict):
     tokens = get_token_for_client(client_id)
     if not tokens:
         return JSONResponse(status_code=400, content={"error": "Token introuvable pour ce client"})
+
+    leads = data.get("leads", [])
+    if not isinstance(leads, list):
+        return JSONResponse(status_code=400, content={"error": "Le format attendu est une liste de leads."})
 
     access_token = tokens["access_token"]
     url = "https://api.hubapi.com/crm/v3/objects/contacts"
@@ -104,23 +102,30 @@ def send_to_hubspot(client_id: str, data: dict):
         "Content-Type": "application/json"
     }
 
-    properties = {}
-    if data.get("prénom"): properties["firstname"] = data["prénom"]
-    if data.get("nom"): properties["lastname"] = data["nom"]
-    if data.get("email"): properties["email"] = data["email"]
-    if data.get("téléphone"): properties["phone"] = data["téléphone"]
-    if data.get("poste"): properties["jobtitle"] = data["poste"]
-    if data.get("entreprise"): properties["company"] = data["entreprise"]
+    results = []
+    for lead in leads:
+        properties = {}
+        if lead.get("prénom"): properties["firstname"] = lead["prénom"]
+        if lead.get("nom"): properties["lastname"] = lead["nom"]
+        if lead.get("email"): properties["email"] = lead["email"]
+        if lead.get("téléphone"): properties["phone"] = lead["téléphone"]
+        if lead.get("poste"): properties["jobtitle"] = lead["poste"]
+        if lead.get("entreprise"): properties["company"] = lead["entreprise"]
 
-    payload = {"properties": properties}
-    response = requests.post(url, headers=headers, json=payload)
+        payload = {"properties": properties}
+        response = requests.post(url, headers=headers, json=payload)
 
-    if response.status_code == 201:
-        return {"message": "Contact ajouté avec succès"}
-    else:
-        return JSONResponse(status_code=500, content={"error": "Erreur HubSpot", "details": response.text})
+        if response.status_code == 201:
+            results.append({"lead": lead, "status": "success"})
+        else:
+            results.append({
+                "lead": lead,
+                "status": "error",
+                "details": response.text
+            })
 
-# 🔐 Route OAuth : redirection vers HubSpot
+    return JSONResponse(content={"results": results})
+
 @app.get("/hubspot/auth")
 def auth_hubspot():
     client_id = os.getenv("HUBSPOT_CLIENT_ID")
@@ -136,7 +141,6 @@ def auth_hubspot():
     )
     return RedirectResponse(url)
 
-# 🔐 Callback OAuth : sauvegarde le token avec un identifiant client
 @app.get("/hubspot/callback")
 def hubspot_callback(request: Request):
     code = request.query_params.get("code")
@@ -160,10 +164,9 @@ def hubspot_callback(request: Request):
     response = requests.post(token_url, data=data, headers=headers)
     tokens = response.json()
 
-    # Génération d’un identifiant client unique
     client_id_generated = str(uuid4())
     save_tokens_for_client(client_id_generated, tokens)
 
-    # ✅ Redirection vers l'interface utilisateur avec client_id
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
     return RedirectResponse(f"{frontend_url}?client_id={client_id_generated}")
+    

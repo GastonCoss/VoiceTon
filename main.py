@@ -9,21 +9,25 @@ import json
 import requests
 from uuid import uuid4
 
+# Chargement des variables d'environnement
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 
+# Middleware CORS pour autoriser les appels frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # À restreindre en production
+    allow_origins=["*"],  # 🔒 à restreindre en production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Fichier local pour stocker les tokens OAuth (en dev uniquement)
 TOKENS_FILE = "tokens.json"
 
+# Fonctions de gestion des tokens
 def save_tokens_for_client(client_id, tokens):
     try:
         with open(TOKENS_FILE, "r") as f:
@@ -42,6 +46,7 @@ def get_token_for_client(client_id):
     except:
         return None
 
+# 🔊 Transcription + structuration des données
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
@@ -85,15 +90,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+# 🚀 Envoi des leads à HubSpot
 @app.post("/send-to-hubspot/{client_id}")
 def send_to_hubspot(client_id: str, data: dict):
     tokens = get_token_for_client(client_id)
     if not tokens:
         return JSONResponse(status_code=400, content={"error": "Token introuvable pour ce client"})
-
-    leads = data.get("leads", [])
-    if not isinstance(leads, list):
-        return JSONResponse(status_code=400, content={"error": "Le format attendu est une liste de leads."})
 
     access_token = tokens["access_token"]
     url = "https://api.hubapi.com/crm/v3/objects/contacts"
@@ -102,8 +104,8 @@ def send_to_hubspot(client_id: str, data: dict):
         "Content-Type": "application/json"
     }
 
-    results = []
-    for lead in leads:
+    success = 0
+    for lead in data.get("leads", []):
         properties = {}
         if lead.get("prénom"): properties["firstname"] = lead["prénom"]
         if lead.get("nom"): properties["lastname"] = lead["nom"]
@@ -116,16 +118,11 @@ def send_to_hubspot(client_id: str, data: dict):
         response = requests.post(url, headers=headers, json=payload)
 
         if response.status_code == 201:
-            results.append({"lead": lead, "status": "success"})
-        else:
-            results.append({
-                "lead": lead,
-                "status": "error",
-                "details": response.text
-            })
+            success += 1
 
-    return JSONResponse(content={"results": results})
+    return {"message": f"{success} contacts ajoutés avec succès"}
 
+# 🔐 Redirection vers HubSpot OAuth
 @app.get("/hubspot/auth")
 def auth_hubspot():
     client_id = os.getenv("HUBSPOT_CLIENT_ID")
@@ -141,6 +138,7 @@ def auth_hubspot():
     )
     return RedirectResponse(url)
 
+# 🔐 Callback OAuth de HubSpot
 @app.get("/hubspot/callback")
 def hubspot_callback(request: Request):
     code = request.query_params.get("code")
@@ -167,6 +165,10 @@ def hubspot_callback(request: Request):
     client_id_generated = str(uuid4())
     save_tokens_for_client(client_id_generated, tokens)
 
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    frontend_url = os.getenv("FRONTEND_URL", "https://voiceton.vercel.app")
     return RedirectResponse(f"{frontend_url}?client_id={client_id_generated}")
-    
+
+# ✅ Route racine pour éviter 404 sur Render
+@app.get("/")
+def read_root():
+    return {"status": "VoiceTon backend is running"}

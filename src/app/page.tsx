@@ -1,124 +1,30 @@
-'use client';
-
-import { useState, useRef } from 'react';
-import axios from 'axios';
+import Link from "next/link";
+import VoiceTonUI from "@/components/VoiceTonUI";
 
 export default function Home() {
-  const [recording, setRecording] = useState(false);
-  const [countdown, setCountdown] = useState(20);
-  const [transcription, setTranscription] = useState(null);
-  const [formData, setFormData] = useState(null);
-  const [clientId, setClientId] = useState('');
-  const [status, setStatus] = useState(null);
-  const [sent, setSent] = useState(false);
-
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const countdownIntervalRef = useRef(null);
-
-  const startRecording = async () => {
-    setRecording(true);
-    setCountdown(20);
-    audioChunksRef.current = [];
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mediaRecorder = new MediaRecorder(stream);
-    mediaRecorderRef.current = mediaRecorder;
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunksRef.current.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'recording.webm');
-
-      try {
-        const response = await axios.post('https://voiceton-api.onrender.com/transcribe/', formData);
-        setTranscription(response.data.transcription);
-        setFormData(response.data.données_structurées);
-        setStatus('Transcription terminée');
-      } catch (error) {
-        console.error(error);
-        setStatus('Erreur lors de la transcription');
-      }
-    };
-
-    mediaRecorder.start();
-    countdownIntervalRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownIntervalRef.current);
-          mediaRecorder.stop();
-          setRecording(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const sendToHubspot = async () => {
-    if (!clientId || !formData) return;
-
-    try {
-      await axios.post(`https://voiceton-api.onrender.com/send-to-hubspot/${clientId}`, formData);
-      setSent(true);
-      setStatus('Données envoyées à HubSpot');
-    } catch (error) {
-      console.error(error);
-      setStatus('Erreur lors de l\'envoi à HubSpot');
-    }
-  };
-
-  const connectHubspot = () => {
-    window.location.href = 'https://voiceton-api.onrender.com/hubspot/auth';
-  };
-
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-white text-black">
-      <h1 className="text-3xl font-bold mb-6">VoiceTon</h1>
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+      <h1 className="text-4xl font-bold mb-4">VoiceTon – Convert voice to CRM</h1>
+      <p className="text-lg mb-6 max-w-xl">
+        VoiceTon lets you capture leads by voice and push them directly into HubSpot – fast, easy, and accurate.
+      </p>
+      <a
+        href="https://app.hubspot.com/oauth/authorize?client_id=c65190d1-8aa0-4a0c-bbef-4881c1969c18&scope=contacts%20crm.objects.contacts.write&redirect_uri=https://voiceton.fr/api/hubspot/callback"
+        target="_blank"
+        className="bg-black text-white px-6 py-3 rounded-lg text-lg mb-4 hover:opacity-80"
+      >
+        Connect with HubSpot
+      </a>
 
-      {!recording && (
-        <button onClick={startRecording} className="mb-4 px-6 py-2 bg-blue-500 text-black font-semibold rounded shadow">
-          🎙️ Démarrer
-        </button>
-      )}
+      {/* 👉 Nouvelle interface */}
+      <VoiceTonUI />
 
-      {recording && <p className="mb-4 text-black">Enregistrement en cours... {countdown}s restantes</p>}
-
-      <input
-        type="text"
-        placeholder="Collez ici votre client_id"
-        value={clientId}
-        onChange={(e) => setClientId(e.target.value)}
-        className="mb-4 px-4 py-2 border rounded w-80 text-black"
-      />
-
-      <button onClick={connectHubspot} className="mb-4 px-6 py-2 bg-orange-400 text-black font-semibold rounded shadow">
-        🔗 Connecter HubSpot
-      </button>
-
-      {formData && (
-        <div className="mb-4 w-full max-w-md">
-          <h2 className="text-lg font-bold mb-2">Champs préremplis :</h2>
-          <pre className="bg-gray-100 p-4 rounded overflow-x-auto text-black">
-            {JSON.stringify(formData, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      {formData && (
-        <button onClick={sendToHubspot} className="px-6 py-2 bg-green-500 text-black font-semibold rounded shadow">
-          📤 Envoyer à HubSpot
-        </button>
-      )}
-
-      {status && <p className="mt-4 text-black font-medium">{status}</p>}
-      {sent && <p className="mt-2 text-green-600 font-bold">✅ Contact enregistré avec succès</p>}
+      <div className="flex gap-4 text-sm mt-10">
+        <Link href="/setup-guide">Setup Guide</Link>
+        <Link href="/privacy">Privacy</Link>
+        <Link href="/terms">Terms</Link>
+        <Link href="/support">Support</Link>
+      </div>
     </main>
   );
 }

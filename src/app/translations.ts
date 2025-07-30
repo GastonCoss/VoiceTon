@@ -1,0 +1,42 @@
+export const translations = {
+    fr: {
+      welcome: "Bienvenue sur VoiceTon 👋",
+      connected: "Client connecté",
+      start: "Démarrer l'enregistrement",
+      stop: "Arrêter",
+      statusRecording: "🎙️ Enregistrement en cours...",
+      statusStopped: "⏹️ Enregistrement arrêté, traitement en cours...",
+      transcription: "Transcription",
+      fields: "Données extraites (modifiables)",
+      send: "Envoyer à HubSpot",
+      noClientId: "❌ Client ID manquant",
+      connect: "Veuillez vous connecter via HubSpot pour accéder à l’application.",
+    },
+    en: {
+      welcome: "Welcome to VoiceTon 👋",
+      connected: "Connected client",
+      start: "Start recording",
+      stop: "Stop",
+      statusRecording: "🎙️ Recording in progress...",
+      statusStopped: "⏹️ Recording stopped, processing...",
+      transcription: "Transcription",
+      fields: "Extracted data (editable)",
+      send: "Send to HubSpot",
+      noClientId: "❌ Missing Client ID",
+      connect: "Please connect via HubSpot to access the app.",
+    },
+    es: {
+      welcome: "Bienvenido a VoiceTon 👋",
+      connected: "Cliente conectado",
+      start: "Iniciar grabación",
+      stop: "Detener",
+      statusRecording: "🎙️ Grabando...",
+      statusStopped: "⏹️ Grabación detenida, procesando...",
+      transcription: "Transcripción",
+      fields: "Datos extraídos (editables)",
+      send: "Enviar a HubSpot",
+      noClientId: "❌ Falta el ID de cliente",
+      connect: "Conéctate con HubSpot para acceder a la aplicación.",
+    }
+  };
+  

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceTon</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex items-center justify-center min-h-screen px-4">
+  <div class="w-full max-w-xl space-y-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+    
+    <div class="text-center">
+      <h1 class="text-3xl font-bold mb-1">🎙️ VoiceTon</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-300">Add contacts to HubSpot using your voice</p>
+    </div>
+
+    <!-- Connect to HubSpot -->
+    <div id="connectSection" class="text-center">
+      <button id="connectBtn" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-xl font-semibold">
+        Connect to HubSpot
+      </button>
+    </div>
+
+    <!-- Voice recorder -->
+    <div id="recorderSection" class="hidden text-center space-y-4">
+      <div id="status" class="text-sm text-gray-500">Ready to record</div>
+
+      <button id="startBtn" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-xl font-semibold">
+        Start Recording
+      </button>
+      <button id="stopBtn" class="hidden bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-xl font-semibold">
+        Stop
+      </button>
+
+      <!-- Simple animation -->
+      <div id="recordingAnimation" class="hidden animate-pulse mt-2 text-green-500 font-bold">Recording...</div>
+    </div>
+
+    <!-- Loader -->
+    <div id="loader" class="hidden text-center">
+      <p class="text-blue-500 font-semibold">Transcribing voice...</p>
+    </div>
+
+    <!-- Display extracted fields -->
+    <div id="results" class="hidden">
+      <h2 class="text-lg font-semibold mb-2">Extracted Contact</h2>
+      <div class="space-y-2">
+        <div><strong>Name:</strong> <span id="name">John Doe</span></div>
+        <div><strong>Email:</strong> <span id="email">john@example.com</span></div>
+        <div><strong>Company:</strong> <span id="company">ACME Inc.</span></div>
+        <div><strong>Phone:</strong> <span id="phone">+33 6 12 34 56 78</span></div>
+      </div>
+      <button id="sendBtn" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold w-full">
+        Send to HubSpot
+      </button>
+    </div>
+
+    <!-- Confirmation -->
+    <div id="confirmation" class="hidden text-center text-green-600 font-bold">
+      ✅ Contact successfully added to HubSpot!
+    </div>
+
+  </div>
+
+  <!-- Script section -->
+  <script>
+    const connectBtn = document.getElementById('connectBtn');
+    const recorderSection = document.getElementById('recorderSection');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const recordingAnimation = document.getElementById('recordingAnimation');
+    const loader = document.getElementById('loader');
+    const results = document.getElementById('results');
+    const sendBtn = document.getElementById('sendBtn');
+    const confirmation = document.getElementById('confirmation');
+    const connectSection = document.getElementById('connectSection');
+
+    // Simulate connection
+    connectBtn.onclick = () => {
+      connectSection.classList.add('hidden');
+      recorderSection.classList.remove('hidden');
+    };
+
+    // Start recording
+    startBtn.onclick = () => {
+      startBtn.classList.add('hidden');
+      stopBtn.classList.remove('hidden');
+      recordingAnimation.classList.remove('hidden');
+      document.getElementById('status').textContent = "Recording...";
+    };
+
+    // Stop recording
+    stopBtn.onclick = () => {
+      stopBtn.classList.add('hidden');
+      recordingAnimation.classList.add('hidden');
+      loader.classList.remove('hidden');
+      document.getElementById('status').textContent = "Processing...";
+
+      // Simulate delay
+      setTimeout(() => {
+        loader.classList.add('hidden');
+        results.classList.remove('hidden');
+        document.getElementById('status').textContent = "Transcription ready.";
+      }, 2000);
+    };
+
+    // Send to HubSpot
+    sendBtn.onclick = () => {
+      results.classList.add('hidden');
+      confirmation.classList.remove('hidden');
+    };
+  </script>
+</body>
+</html>

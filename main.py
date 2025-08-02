@@ -105,6 +105,8 @@ def send_to_hubspot(client_id: str, data: dict):
     }
 
     success = 0
+    errors = []
+
     for lead in data.get("leads", []):
         properties = {}
         if lead.get("prénom"): properties["firstname"] = lead["prénom"]
@@ -119,8 +121,17 @@ def send_to_hubspot(client_id: str, data: dict):
 
         if response.status_code == 201:
             success += 1
+        else:
+            try:
+                error_details = response.json()
+                errors.append(error_details)
+            except:
+                errors.append({"error": "Erreur inconnue", "status_code": response.status_code})
 
-    return {"message": f"{success} contacts ajoutés avec succès"}
+    return JSONResponse(content={
+        "message": f"{success} contacts ajoutés avec succès",
+        "erreurs": errors
+    })
 
 # 🔐 Redirection vers HubSpot OAuth
 @app.get("/hubspot/auth")
@@ -167,6 +178,32 @@ def hubspot_callback(request: Request):
 
     frontend_url = os.getenv("FRONTEND_URL", "https://voiceton.vercel.app")
     return RedirectResponse(f"{frontend_url}?client_id={client_id_generated}")
+
+# ✨ IA pour corriger les données extraites
+@app.post("/improve-data/")
+def improve_data(payload: dict):
+    transcription = payload.get("transcription", "")
+    if not transcription:
+        return JSONResponse(status_code=400, content={"error": "Transcription manquante"})
+
+    prompt = (
+        f"Voici une transcription vocale : \"{transcription}\"\n"
+        f"Corrige et complète les éléments suivants en JSON : prénom, nom, poste, entreprise, email, téléphone.\n"
+        f"Format attendu : {{ \"prénom\": ..., \"nom\": ..., \"poste\": ..., \"entreprise\": ..., \"email\": ..., \"téléphone\": ... }}"
+    )
+
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{ "role": "user", "content": prompt }],
+        temperature=0.2
+    )
+
+    try:
+        structured = json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        structured = {}
+
+    return JSONResponse(content={ "données_améliorées": structured })
 
 # ✅ Route racine pour éviter 404 sur Render
 @app.get("/")

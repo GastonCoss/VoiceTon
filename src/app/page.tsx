@@ -9,7 +9,6 @@ export default function Home() {
         VoiceTon lets you capture leads by voice and push them directly into HubSpot – fast, easy, and accurate.
       </p>
 
-      {/* ✅ Lien OAuth corrigé sans "contacts" */}
       <a
         href="https://app.hubspot.com/oauth/authorize?client_id=c65190d1-8aa0-4a0c-bbef-4881c1969c18&scope=crm.objects.contacts.write%20crm.objects.contacts.read&redirect_uri=https://voiceton.fr/api/hubspot/callback"
         target="_blank"
@@ -18,7 +17,6 @@ export default function Home() {
         Connect with HubSpot
       </a>
 
-      {/* 👉 Interface principale */}
       <VoiceTonUI />
 
       <div className="flex gap-4 text-sm mt-10">

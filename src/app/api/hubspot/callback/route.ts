@@ -1,38 +1,31 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
+
+  if (!code) {
+    return NextResponse.json({ error: "Missing authorization code" }, { status: 400 });
+  }
+
   try {
-    const body = await req.json();
-
-    const hubspotResponse = await fetch('https://api.hubapi.com/crm/v3/objects/contacts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.HUBSPOT_API_KEY}`,
-      },
-      body: JSON.stringify({
-        properties: {
-          firstname: body.prénom,
-          lastname: body.nom,
-          email: body.email,
-          phone: body.téléphone,
-          company: body.entreprise,
-          jobtitle: body.poste,
-        },
-      }),
+    const response = await fetch("https://voiceton-api.onrender.com/hubspot/callback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
     });
 
-    const data = await hubspotResponse.json();
+    const result = await response.json();
 
-    if (!hubspotResponse.ok) {
-      console.error('Erreur HubSpot :', data);
-      return NextResponse.json({ error: 'Erreur côté HubSpot', details: data }, { status: 500 });
+    if (!response.ok) {
+      console.error("Backend error:", result);
+      return NextResponse.json({ error: "Erreur lors de la connexion à HubSpot", details: result }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, contact: data });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    console.error('Erreur API :', err.message);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    // Redirection vers page de succès (ou afficher message simple)
+    return NextResponse.redirect("https://voiceton.fr?hubspot=success");
+  } catch (error) {
+    console.error("Erreur réseau :", error);
+    return NextResponse.json({ error: "Erreur de communication avec le backend" }, { status: 500 });
   }
 }
